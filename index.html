@@ -342,6 +342,7 @@ let state = {
   tareas: S.get('tareas')||{},
   icalUrl: S.get('icalUrl')||'',
   gastosFijos: S.get('gastosFijos')||[],
+  sueldoBase: S.get('sueldoBase')||0,
   showIngForm:false, showFijForm:false, showVarForm:false,
   theme: S.get('theme')||'slate',
   showThemePicker: false,
@@ -379,6 +380,8 @@ function save() {
   S.set('perfil',state.perfil);
   S.set('icalUrl',state.icalUrl);
   S.set('gastosFijos',state.gastosFijos);
+  S.set('sueldoBase',state.sueldoBase);
+  scheduleSbSave();
   S.set('notas',state.notas);
   S.set('contadores',state.contadores);
   S.set('proyectos',state.proyectos);
@@ -430,6 +433,11 @@ function renderOnboarding() {
   const yearInp = el('input',{id:'ob-year',value:String(new Date().getFullYear()),style:'width:100%;border:1px solid #334155;border-radius:10px;padding:12px 14px;background:#0f172a;color:#f8fafc;outline:none;font-size:15px;margin-bottom:16px;box-sizing:border-box;font-family:inherit'});
   box.appendChild(yearInp);
 
+  // Email (para sync entre dispositivos)
+  box.appendChild(el('div',{style:'font-size:12px;font-weight:600;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px'},['Tu email (para sincronizar entre dispositivos)']));
+  const emailInp = el('input',{id:'ob-email',type:'email',placeholder:'tumail@ejemplo.com',style:'width:100%;border:1px solid #334155;border-radius:10px;padding:12px 14px;background:#0f172a;color:#f8fafc;outline:none;font-size:15px;margin-bottom:16px;box-sizing:border-box;font-family:inherit'});
+  box.appendChild(emailInp);
+
   // Emoji picker
   box.appendChild(el('div',{style:'font-size:12px;font-weight:600;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px'},['Tu ícono']));
   let selectedEmoji = '🌟';
@@ -468,7 +476,8 @@ function renderOnboarding() {
   submitBtn.addEventListener('click',()=>{
     const nombre=document.getElementById('ob-name')?.value.trim()||'Usuario';
     const año=document.getElementById('ob-year')?.value.trim()||String(new Date().getFullYear());
-    state.perfil={nombre,emoji:selectedEmoji,año};
+    const email=document.getElementById('ob-email')?.value.trim()||'';
+    state.perfil={nombre,emoji:selectedEmoji,año,email};
     state.theme=selectedTheme;
     save();
     // Rebuild app
@@ -476,6 +485,7 @@ function renderOnboarding() {
     applyTheme();
     render();
     renderThemePicker();
+    setTimeout(sbLoadAndMerge, 1000);
     setTimeout(syncGoogleCalendar,800);
   });
   box.appendChild(submitBtn);
@@ -625,6 +635,12 @@ function renderTabs() {
     sb.appendChild(el('div',{class:'sidebar-section'},['Cuenta']));
     const perfilBtn=el('button',{class:'sidebar-btn'+(state.showPerfil?' active':''),onclick:()=>{state.showPerfil=true;render();}},['👤 Mi perfil']);
     sb.appendChild(perfilBtn);
+    const syncRow=el('div',{style:'display:flex;align-items:center;justify-content:space-between;padding:6px 12px;margin-top:4px'});
+    syncRow.appendChild(el('span',{id:'sync-indicator',style:'font-size:12px;color:#94a3b8'},['☁️']));
+    const syncBtn=el('button',{style:'font-size:11px;color:#94a3b8;background:none;border:none;cursor:pointer;padding:4px 6px'},['↻ Sync']);
+    syncBtn.addEventListener('click',()=>sbLoadAndMerge());
+    syncRow.appendChild(syncBtn);
+    sb.appendChild(syncRow);
   }
 }
 
@@ -1141,6 +1157,92 @@ function renderFinanzas() {
   const totalVar=gasVarDelMes.reduce((s,mv)=>s+Number(mv.monto),0);
   const balance=totalIng-totalFijos-totalVar;
 
+  // ── REGLA 50/30/20 ──
+  const reglaCard = div('card',[],`background:linear-gradient(135deg,#0f172a,#1e293b);border:none;margin-bottom:16px`);
+
+  // Sueldo input
+  const sueldoHdr=div('',[],`display:flex;justify-content:space-between;align-items:center;margin-bottom:12px`);
+  sueldoHdr.appendChild(el('div',{style:'font-size:14px;font-weight:700;color:#f8fafc'},['Regla 50/30/20']));
+  sueldoHdr.appendChild(el('div',{style:'font-size:10px;color:#64748b'},['Ingreso mensual']));
+  reglaCard.appendChild(sueldoHdr);
+
+  const sueldoRow=div('',[],`display:flex;gap:8px;align-items:center;margin-bottom:16px`);
+  const euroLbl=el('span',{style:'font-size:20px;font-weight:800;color:#64748b'},['€']);
+  const sueldoInp=el('input',{
+    id:'sueldo-inp', type:'number', placeholder:'ej: 2000',
+    value: state.sueldoBase||'',
+    style:'flex:1;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:12px 14px;font-size:22px;font-weight:800;color:#f8fafc;outline:none;font-family:inherit'
+  });
+  sueldoInp.addEventListener('input', e=>{
+    state.sueldoBase = Number(e.target.value)||0;
+    save();
+    render();
+  });
+  sueldoRow.appendChild(euroLbl);
+  sueldoRow.appendChild(sueldoInp);
+  reglaCard.appendChild(sueldoRow);
+
+  const base = state.sueldoBase || totalIng;
+
+  if(base > 0) {
+    const nec50 = base * 0.50;
+    const dis30 = base * 0.30;
+    const aho20 = base * 0.20;
+    const gastado_nec = totalFijos;
+    const gastado_dis = totalVar;
+    const gastado_aho = Math.max(0, base - totalFijos - totalVar);
+    const pctFijos = Math.min(100, Math.round(gastado_nec / nec50 * 100));
+    const pctVar   = Math.min(100, Math.round(gastado_dis / dis30 * 100));
+    const pctAho   = Math.min(100, Math.round(gastado_aho / aho20 * 100));
+
+    [
+      {label:'50% Necesidades', desc:'Gastos fijos y esenciales', target:nec50, real:gastado_nec, pct:pctFijos, color:'#3b82f6'},
+      {label:'30% Estilo de vida', desc:'Gastos variables del mes',  target:dis30, real:gastado_dis, pct:pctVar,   color:'#a855f7'},
+      {label:'20% Ahorro',         desc:'Meta de ahorro mensual',    target:aho20, real:gastado_aho, pct:pctAho,   color:'#22c55e'},
+    ].forEach(row2=>{
+      const ok = row2.real <= row2.target;
+      const wrap=div('',[],`margin-bottom:14px`);
+
+      // Header row
+      const top=div('',[],`display:flex;justify-content:space-between;align-items:center;margin-bottom:6px`);
+      const left2=div('');
+      left2.appendChild(el('div',{style:`font-size:13px;font-weight:700;color:${row2.color}`},[row2.label]));
+      left2.appendChild(el('div',{style:'font-size:10px;color:#64748b;margin-top:1px'},[row2.desc]));
+      top.appendChild(left2);
+
+      // Right: actual vs target
+      const right2=div('',[],`text-align:right`);
+      right2.appendChild(el('div',{style:`font-size:18px;font-weight:800;color:${ok?row2.color:'#ef4444'}`},[`€${row2.target.toFixed(0)}`]));
+      right2.appendChild(el('div',{style:'font-size:10px;color:#64748b'},[`${row2.label.split('%')[0]}% de €${base.toFixed(0)}`]));
+      top.appendChild(right2);
+      wrap.appendChild(top);
+
+      // Progress bar
+      const bgBar=div('',[],'height:8px;border-radius:99px;background:#1e293b;overflow:hidden');
+      const fillPct = row2.label.includes('Ahorro') ? pctAho : row2.pct;
+      bgBar.appendChild(div('',[],'height:100%;border-radius:99px;transition:width 0.5s;background:'+(ok?row2.color:'#ef4444')+';width:'+fillPct+'%'));
+      wrap.appendChild(bgBar);
+
+      // Status
+      const statusRow=div('',[],`display:flex;justify-content:space-between;margin-top:4px`);
+      if(row2.label.includes('Ahorro')) {
+        statusRow.appendChild(el('span',{style:'font-size:11px;color:#94a3b8'},['Disponible este mes']));
+        statusRow.appendChild(el('span',{style:`font-size:11px;font-weight:700;color:${ok?'#22c55e':'#ef4444'}`},[`€${row2.real.toFixed(0)} / €${row2.target.toFixed(0)}`]));
+      } else if(!ok) {
+        statusRow.appendChild(el('span',{style:'font-size:11px;color:#ef4444'},['⚠ Excedido']));
+        statusRow.appendChild(el('span',{style:'font-size:11px;font-weight:700;color:#ef4444'},[`+€${(row2.real-row2.target).toFixed(0)}`]));
+      } else {
+        statusRow.appendChild(el('span',{style:'font-size:11px;color:#64748b'},['Gastado / Límite']));
+        statusRow.appendChild(el('span',{style:'font-size:11px;color:#64748b'},[`€${row2.real.toFixed(0)} / €${row2.target.toFixed(0)}`]));
+      }
+      wrap.appendChild(statusRow);
+      reglaCard.appendChild(wrap);
+    });
+  } else {
+    reglaCard.appendChild(el('div',{style:'font-size:13px;color:#64748b;text-align:center;padding:8px 0'},['Ingresá tu sueldo mensual para ver la distribución ideal']));
+  }
+  c.appendChild(reglaCard);
+
   // ── RESUMEN TARJETAS ──
   const resGrid=div('',[],`display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px`);
   [
@@ -1623,6 +1725,84 @@ async function syncGoogleCalendar() {
   } catch(e){ console.log('GCal sync error:',e); }
 }
 
+
+// ── Supabase sync ──
+const SB_URL = 'https://fermqeydxidjvyspvxid.supabase.co';
+const SB_KEY = 'sb_publishable_ezZL68kBwChR0I1oiA9Oag_aZHsVUag';
+
+async function sbSave(userId, data) {
+  try {
+    const res = await fetch(SB_URL + '/rest/v1/app_data', {
+      method: 'POST',
+      headers: {
+        'apikey': SB_KEY,
+        'Authorization': 'Bearer ' + SB_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({ user_id: userId, data: data, updated_at: new Date().toISOString() })
+    });
+    return res.ok;
+  } catch(e) { return false; }
+}
+
+async function sbLoad(userId) {
+  try {
+    const res = await fetch(SB_URL + '/rest/v1/app_data?user_id=eq.' + encodeURIComponent(userId) + '&select=data', {
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    if(!res.ok) return null;
+    const rows = await res.json();
+    return rows.length > 0 ? rows[0].data : null;
+  } catch(e) { return null; }
+}
+
+let sbSaveTimer = null;
+function scheduleSbSave() {
+  if(!state.perfil) return;
+  clearTimeout(sbSaveTimer);
+  sbSaveTimer = setTimeout(async function() {
+    const userId = (state.perfil.email || state.perfil.nombre) + '_pochoclo';
+    const snapshot = {
+      grupos:state.grupos, checks:state.checks, semana:state.semana,
+      meals:state.meals, eventos:state.eventos, movs:state.movs,
+      gastosFijos:state.gastosFijos, compras:state.compras,
+      bienestar:state.bienestar, notas:state.notas,
+      contadores:state.contadores, proyectos:state.proyectos,
+      tareas:state.tareas, customMenu:state.customMenu,
+      icalUrl:state.icalUrl, theme:state.theme, perfil:state.perfil,
+      sueldoBase:state.sueldoBase,
+    };
+    const ok = await sbSave(userId, snapshot);
+    const ind = document.getElementById('sync-indicator');
+    if(ind) {
+      ind.textContent = ok ? '☁️ Guardado' : '☁️';
+      ind.style.color = ok ? '#15803d' : '#94a3b8';
+      if(ok) setTimeout(function(){ if(ind){ ind.textContent='☁️'; ind.style.color='#94a3b8'; } }, 2000);
+    }
+  }, 2000);
+}
+
+async function sbLoadAndMerge() {
+  if(!state.perfil) return;
+  const userId = (state.perfil.email || state.perfil.nombre) + '_pochoclo';
+  const ind = document.getElementById('sync-indicator');
+  if(ind) { ind.textContent='☁️ Sync...'; ind.style.color='#1d4ed8'; }
+  const remote = await sbLoad(userId);
+  if(!remote) {
+    if(ind) { ind.textContent='☁️'; ind.style.color='#94a3b8'; }
+    return;
+  }
+  const keys = ['grupos','checks','semana','meals','eventos','movs','gastosFijos',
+                 'compras','bienestar','notas','contadores','proyectos','tareas',
+                 'customMenu','icalUrl','theme','sueldoBase'];
+  keys.forEach(function(k) { if(remote[k] !== undefined) state[k] = remote[k]; });
+  if(remote.perfil) state.perfil = remote.perfil;
+  save();
+  render();
+  if(ind) { ind.textContent='☁️ Listo'; ind.style.color='#15803d'; setTimeout(function(){ if(ind){ ind.textContent='☁️'; ind.style.color='#94a3b8'; } },2000); }
+}
+
 // Start
 applyTheme();
 if(!state.perfil) {
@@ -1630,6 +1810,8 @@ if(!state.perfil) {
 } else {
   render();
   renderThemePicker();
+  // Sync from cloud on load
+  setTimeout(sbLoadAndMerge, 1000);
 }
 
 </script>
