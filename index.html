@@ -513,7 +513,7 @@ const N26_CUOTAS=[
 
 // ── STATE ──
 let state = {
-  tab: S.get('tab')||'rutinas',
+  tab: S.get('tab')||'diario',
   grupos: (()=>{
     const saved=S.get('grupos');
     if(!saved) return JSON.parse(JSON.stringify(GRUPOS_INIT));
@@ -535,6 +535,7 @@ let state = {
   gastosFijos: S.get('gastosFijos')||[],
   sueldoBase: S.get('sueldoBase')||0,
   showIngForm:false, showFijForm:false, showVarForm:false,
+  vidaVista: 'menú',
   theme: S.get('theme')||'slate',
   showThemePicker: false,
   perfil: S.get('perfil')||null,   // {nombre, emoji, año}
@@ -586,14 +587,17 @@ function render() {
 function setTab(t) { state.tab=t; save(); render(); renderThemePicker(); }
 
 const TAB_LABELS = {
-  'rutinas':'📋 Diario','calendario':'📅 Calendario',
-  'menú':'🍽 Menú','finanzas':'💰 Finanzas','proyectos':'✨ Proyectos',
-  'compras':'🛒 Compras','notas':'💭 Notas'
+  'diario':   '📋 Diario',
+  'rutinas':  '🏃 Rutinas',
+  'casa':     '🏠 Casa',
+  'trabajo':  '💼 Trabajo',
+  'vida':     '🌿 Vida',
+  'personal': '💭 Personal',
 };
 const TAB_SECTIONS = {
-  'Diario':['rutinas'],
-  'Vida':['menú','finanzas','proyectos','compras'],
-  'Personal':['notas']
+  'Diario':   ['diario','rutinas'],
+  'Hogar':    ['casa','trabajo'],
+  'Vida':     ['vida','personal'],
 };
 
 const EMOJIS_PERFIL = ['🌟','✨','🎬','📸','🎭','🌸','🦋','🌿','🐱','🦊','🌙','☀️','🍀','🎸','🎨','📚','🧠','💫','🌺','🦄','🐝','🌊','🏔️','🎯','🪷','🌈','🔮','🎪','🎠','🎡','🌻','🍉','🦋','🎀','💎','🔥','⚡','🌴','🦩','🐉','🎭','🎪','🌹','🍄','🎶','🎵','🏄','🧩','🪐'];
@@ -785,8 +789,8 @@ function renderThemePicker() {
 }
 
 function renderTabs() {
-  const tabs1=['rutinas','finanzas','proyectos'];
-  const tabs2=['menú','compras','notas'];
+  const tabs1=['diario','rutinas','casa','trabajo'];
+  const tabs2=['vida','personal'];
   if($('tabs1')){ $('tabs1').innerHTML='';
     tabs1.forEach(t=>{
       const b=el('button',{class:'tab'+(state.tab===t?' active':''),onclick:()=>setTab(t)},[t]);
@@ -1955,6 +1959,165 @@ function renderProyectos() {
 }
 
 // ── MAIN RENDER ──
+
+// ── DIARIO — fecha, tareas, bienestar ──
+function renderDiario() {
+  const c=$('content'); c.innerHTML='';
+  // Fecha + reloj (reuse from rutinas)
+  const hoyDate=new Date();
+  const diasSem=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const mesesN=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const fechaDiv=div('',[],`display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding:20px;background:var(--accent);border-radius:18px;color:#fff`);
+  const fechaLeft=div('');
+  fechaLeft.appendChild(el('div',{style:'font-size:11px;font-weight:600;letter-spacing:3px;text-transform:uppercase;opacity:0.7;margin-bottom:4px'},[diasSem[hoyDate.getDay()===0?6:hoyDate.getDay()-1]]));
+  const fechaNumRow=div('',[],`display:flex;align-items:baseline;gap:8px`);
+  fechaNumRow.appendChild(el('span',{style:'font-size:52px;font-weight:800;line-height:1'},[String(hoyDate.getDate())]));
+  const fechaMesAño=div('');
+  fechaMesAño.appendChild(el('div',{style:'font-size:16px;font-weight:600;text-transform:capitalize'},[mesesN[hoyDate.getMonth()]]));
+  fechaMesAño.appendChild(el('div',{style:'font-size:13px;opacity:0.6'},[String(hoyDate.getFullYear())]));
+  fechaNumRow.appendChild(fechaMesAño);
+  fechaLeft.appendChild(fechaNumRow);
+  fechaDiv.appendChild(fechaLeft);
+  function getHora(){ const n=new Date(); return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0'); }
+  const relojDiv=div('',[],`text-align:right`);
+  const relojEl=el('div',{id:'reloj-live',style:'font-size:38px;font-weight:300;letter-spacing:2px'},[getHora()]);
+  relojDiv.appendChild(relojEl);
+  relojDiv.appendChild(el('div',{style:'font-size:11px;opacity:0.5;text-align:right;margin-top:2px'},['Berlin']));
+  fechaDiv.appendChild(relojDiv);
+  c.appendChild(fechaDiv);
+  if(window._relojInterval) clearInterval(window._relojInterval);
+  window._relojInterval=setInterval(function(){ const e=document.getElementById('reloj-live'); if(e) e.textContent=getHora(); else clearInterval(window._relojInterval); },10000);
+
+  // Tareas
+  const tareasKey=getTodayKey();
+  if(!state.tareas[tareasKey]) state.tareas[tareasKey]=[];
+  const tareasHoy=state.tareas[tareasKey];
+  const tCard=div('card',[],`margin-bottom:16px`);
+  const tHdr=div('',[],`display:flex;justify-content:space-between;align-items:center;margin-bottom:12px`);
+  tHdr.appendChild(el('div',{style:'font-size:15px;font-weight:700'},['Tareas de hoy']));
+  if(tareasHoy.length){ const done2=tareasHoy.filter(function(t){return t.done;}).length; tHdr.appendChild(el('div',{style:'font-size:12px;color:var(--faint)'},[done2+'/'+tareasHoy.length])); }
+  tCard.appendChild(tHdr);
+  const tRow=div('',[],`display:flex;gap:8px;margin-bottom:${tareasHoy.length?'10px':'0'}`);
+  const tInp=el('input',{id:'tarea-hoy-inp',placeholder:'Agregar tarea...',style:'flex:1;border:1.5px solid var(--border);border-radius:12px;padding:11px 14px;font-size:14px;background:var(--bg);color:var(--text);outline:none;font-family:inherit'});
+  function addTH(){ var v=document.getElementById('tarea-hoy-inp'); if(!v||!v.value.trim()) return; state.tareas[tareasKey].push({id:uid(),texto:v.value.trim(),done:false}); save(); render(); }
+  tInp.addEventListener('keydown',function(e){ if(e.key==='Enter') addTH(); });
+  tRow.appendChild(tInp);
+  tRow.appendChild(btn('+','',addTH,'background:var(--accent);color:#fff;border:none;border-radius:12px;padding:11px 16px;font-size:16px;font-weight:700'));
+  tCard.appendChild(tRow);
+  tareasHoy.forEach(function(t,i){
+    var row=div('',[],`display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border)`);
+    var cb=div('',[t.done?'✓':''],`width:24px;height:24px;border-radius:8px;flex-shrink:0;background:${t.done?'var(--green)':'transparent'};border:2px solid ${t.done?'var(--green)':'var(--border)'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;cursor:pointer`);
+    cb.addEventListener('click',function(){ state.tareas[tareasKey][i].done=!state.tareas[tareasKey][i].done; save(); render(); });
+    var txt=el('span',{style:`flex:1;font-size:14px;color:${t.done?'var(--faint)':'var(--text)'};text-decoration:${t.done?'line-through':'none'}`},[t.texto]);
+    var del=btn('×','',function(){ state.tareas[tareasKey].splice(i,1); save(); render(); },'background:none;border:none;color:var(--faint);font-size:17px;padding:0 2px;cursor:pointer');
+    row.appendChild(cb); row.appendChild(txt); row.appendChild(del);
+    tCard.appendChild(row);
+  });
+  c.appendChild(tCard);
+
+  // Bienestar
+  const hoyK=getTodayKey();
+  const hb=state.bienestar[hoyK]||{agua:0,sueno:0,animo:0};
+  const ANIMOS2=['😔','😐','🙂','😊','🤩'];
+  const bCard=div('card');
+  bCard.appendChild(el('div',{style:'font-size:14px;font-weight:700;margin-bottom:14px'},['Bienestar']));
+  bCard.appendChild(el('div',{style:'font-size:12px;font-weight:600;color:var(--blue);margin-bottom:7px'},[`💧 Agua — ${hb.agua}/8`]));
+  const aRow=div('',[],`display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px`);
+  for(let i=0;i<8;i++){
+    const ab=div('',[i<hb.agua?'💧':'·'],`width:38px;height:38px;border-radius:10px;border:2px solid ${i<hb.agua?'var(--blue)':'var(--border)'};background:${i<hb.agua?'var(--blue)':'var(--bg)'};display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;user-select:none;-webkit-user-select:none`);
+    ab.addEventListener('click',()=>{ const val=i<hb.agua?i:i+1; state.bienestar[hoyK]={...hb,agua:val}; save(); render(); });
+    aRow.appendChild(ab);
+  }
+  bCard.appendChild(aRow);
+  bCard.appendChild(el('div',{style:'font-size:12px;font-weight:600;color:var(--accent);margin-bottom:7px'},[`🌙 Sueño — ${hb.sueno||'—'}h`]));
+  const sRow=div('',[],`display:flex;gap:5px;margin-bottom:14px`);
+  [5,6,7,8,9,10].forEach(h=>{ const sb=el('button',{style:`flex:1;border-radius:10px;font-size:13px;padding:11px 4px;border:1.5px solid ${hb.sueno===h?'var(--accent)':'var(--border)'};background:${hb.sueno===h?'var(--accent)':'var(--bg)'};color:${hb.sueno===h?'#fff':'var(--muted)'};font-weight:${hb.sueno===h?700:400};cursor:pointer`},[`${h}h`]); sb.addEventListener('click',()=>{ state.bienestar[hoyK]={...hb,sueno:h}; save(); render(); }); sRow.appendChild(sb); });
+  bCard.appendChild(sRow);
+  bCard.appendChild(el('div',{style:'font-size:12px;font-weight:600;color:var(--amber);margin-bottom:10px'},['✨ Ánimo']));
+  const aniRow=div('',[],`display:flex;gap:8px;justify-content:space-around;margin-bottom:6px`);
+  ANIMOS2.forEach((a,i)=>{ const ae=el('div',{style:`font-size:30px;cursor:pointer;opacity:${hb.animo===i+1?1:0.25};transform:${hb.animo===i+1?'scale(1.2)':'scale(1)'};transition:all 0.15s;user-select:none;-webkit-user-select:none`},[a]); ae.addEventListener('click',()=>{ state.bienestar[hoyK]={...hb,animo:i+1}; save(); render(); }); aniRow.appendChild(ae); });
+  bCard.appendChild(aniRow);
+  if(hb.animo>0) bCard.appendChild(el('div',{style:'text-align:center;font-size:12px;color:var(--amber);margin-top:4px'},[['Un día difícil','Día normal','Bien','Muy bien','Excelente'][hb.animo-1]]));
+  c.appendChild(bCard);
+}
+
+// ── CASA — rutinas del hogar ──
+function renderCasa() {
+  const c=$('content'); c.innerHTML='';
+  c.appendChild(el('div',{style:'font-size:22px;font-weight:800;margin-bottom:20px'},['🏠 Casa']));
+  const hoy=getTodayKey();
+  const gruposCasa=state.grupos.filter(g=>g.id==='casa');
+  if(!gruposCasa.length){ c.appendChild(el('div',{style:'color:var(--faint);text-align:center;padding:40px 0'},['Sin rutinas de casa'])); return; }
+  gruposCasa.forEach(g=>{
+    g.items.forEach(item=>{
+      const done=!!state.checks[`${hoy}__${item.id}`];
+      const row=div('rutina-row'+(done?' done':''));
+      row.addEventListener('click',()=>{ state.checks[`${hoy}__${item.id}`]=!state.checks[`${hoy}__${item.id}`]; save(); render(); });
+      const cb=div('check-box'+(done?' done':''),[done?'✓':'']);
+      const info=div('',[],`flex:1`);
+      info.appendChild(el('div',{class:'rutina-nombre'+(done?' done':'')},[item.nombre]));
+      info.appendChild(el('div',{class:'rutina-frec'},[item.frec]));
+      row.appendChild(cb); row.appendChild(info);
+      row.appendChild(el('span',{style:`font-size:18px;opacity:${done?1:0.2}`},[g.emoji]));
+      c.appendChild(row);
+    });
+  });
+}
+
+// ── TRABAJO — proyectos + rutinas de trabajo ──
+function renderTrabajo() {
+  const c=$('content'); c.innerHTML='';
+  c.appendChild(el('div',{style:'font-size:22px;font-weight:800;margin-bottom:20px'},['💼 Trabajo']));
+  const hoy=getTodayKey();
+  // Work routines
+  const gruposTrabajo=state.grupos.filter(g=>g.id==='trabajo'||g.id==='proyectos');
+  gruposTrabajo.forEach(g=>{
+    if(!g.items.length) return;
+    const hdr=div('',[],`display:flex;align-items:center;gap:8px;margin-bottom:10px`);
+    hdr.appendChild(el('span',{style:'font-size:18px'},[g.emoji]));
+    hdr.appendChild(el('span',{style:'font-size:14px;font-weight:700;color:'+g.color},[g.label]));
+    c.appendChild(hdr);
+    g.items.forEach(item=>{
+      const done=!!state.checks[`${hoy}__${item.id}`];
+      const row=div('rutina-row'+(done?' done':''));
+      row.addEventListener('click',()=>{ state.checks[`${hoy}__${item.id}`]=!state.checks[`${hoy}__${item.id}`]; save(); render(); });
+      const cb=div('check-box'+(done?' done':''),[done?'✓':'']);
+      const info=div('',[],`flex:1`);
+      info.appendChild(el('div',{class:'rutina-nombre'+(done?' done':'')},[item.nombre]));
+      info.appendChild(el('div',{class:'rutina-frec'},[item.frec]));
+      row.appendChild(cb); row.appendChild(info);
+      c.appendChild(row);
+    });
+    c.appendChild(div('',[],'margin-bottom:16px'));
+  });
+  // Projects
+  c.appendChild(el('div',{style:'font-size:15px;font-weight:700;margin-bottom:12px;margin-top:8px'},['Proyectos']));
+  renderProyectos();
+}
+
+// ── VIDA — menú + finanzas + compras ──
+function renderVida() {
+  const c=$('content'); c.innerHTML='';
+  const vistaRow=div('',[],`display:flex;gap:6px;margin-bottom:20px`);
+  ['menú','finanzas','compras'].forEach(v=>{
+    const labels={'menú':'🍽 Menú','finanzas':'💰 Finanzas','compras':'🛒 Compras'};
+    const active=(state.vidaVista||'menú')===v;
+    vistaRow.appendChild(btn(labels[v],'',()=>{ state.vidaVista=v; render(); },`flex:1;border-radius:12px;font-size:13px;font-weight:${active?700:400};padding:10px 4px;background:${active?'var(--accent)':'var(--surface)'};color:${active?'#fff':'var(--muted)'};border:1.5px solid ${active?'var(--accent)':'var(--border)'};transition:all 0.15s`));
+  });
+  c.appendChild(vistaRow);
+  const v=state.vidaVista||'menú';
+  if(v==='menú') renderMenu();
+  else if(v==='finanzas') renderFinanzas();
+  else if(v==='compras') renderCompras();
+}
+
+// ── PERSONAL — notas ──
+function renderPersonal() {
+  const c=$('content'); c.innerHTML='';
+  c.appendChild(el('div',{style:'font-size:22px;font-weight:800;margin-bottom:20px'},['💭 Personal']));
+  renderNotas();
+}
+
 const PAGE_TITLES = {
   'rutinas':'Rutinas','menú':'Menú semanal','calendario':'Calendario',
   'finanzas':'Finanzas','proyectos':'Proyectos',
