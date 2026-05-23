@@ -1182,7 +1182,7 @@ function renderFinanzas() {
   sueldoRow.appendChild(sueldoInp);
   reglaCard.appendChild(sueldoRow);
 
-  const base = state.sueldoBase || totalIng;
+  const base = totalIng > 0 ? totalIng : (state.sueldoBase || 0);
 
   if(base > 0) {
     const nec50 = base * 0.50;
@@ -1196,50 +1196,49 @@ function renderFinanzas() {
     const pctAho   = Math.min(100, Math.round(gastado_aho / aho20 * 100));
 
     [
-      {label:'50% Necesidades', desc:'Gastos fijos y esenciales', target:nec50, real:gastado_nec, pct:pctFijos, color:'#3b82f6'},
-      {label:'30% Estilo de vida', desc:'Gastos variables del mes',  target:dis30, real:gastado_dis, pct:pctVar,   color:'#a855f7'},
-      {label:'20% Ahorro',         desc:'Meta de ahorro mensual',    target:aho20, real:gastado_aho, pct:pctAho,   color:'#22c55e'},
-    ].forEach(row2=>{
+      {label:'50% Necesidades',  desc:'Gastos fijos',        target:nec50, real:gastado_nec, pct:pctFijos, color:'#3b82f6'},
+      {label:'30% Estilo de vida',desc:'Gastos variables',   target:dis30, real:gastado_dis, pct:pctVar,   color:'#a855f7'},
+      {label:'20% Ahorro',        desc:'Lo que queda libre', target:aho20, real:gastado_aho, pct:pctAho,   color:'#22c55e'},
+    ].forEach(function(row2){
       const ok = row2.real <= row2.target;
-      const wrap=div('',[],`margin-bottom:14px`);
+      const resto = row2.target - row2.real;
+      const wrap=div('',[],`margin-bottom:16px`);
 
-      // Header row
-      const top=div('',[],`display:flex;justify-content:space-between;align-items:center;margin-bottom:6px`);
+      // Label + límite (pequeño)
+      const top=div('',[],`display:flex;justify-content:space-between;align-items:center;margin-bottom:8px`);
       const left2=div('');
-      left2.appendChild(el('div',{style:`font-size:13px;font-weight:700;color:${row2.color}`},[row2.label]));
-      left2.appendChild(el('div',{style:'font-size:10px;color:#64748b;margin-top:1px'},[row2.desc]));
+      left2.appendChild(el('div',{style:`font-size:12px;font-weight:700;color:${row2.color};letter-spacing:0.5px`},[row2.label]));
+      left2.appendChild(el('div',{style:'font-size:10px;color:#64748b;margin-top:1px'},[row2.desc+' · límite: €'+row2.target.toFixed(0)]));
       top.appendChild(left2);
-
-      // Right: actual vs target
-      const right2=div('',[],`text-align:right`);
-      right2.appendChild(el('div',{style:`font-size:18px;font-weight:800;color:${ok?row2.color:'#ef4444'}`},[`€${row2.target.toFixed(0)}`]));
-      right2.appendChild(el('div',{style:'font-size:10px;color:#64748b'},[`${row2.label.split('%')[0]}% de €${base.toFixed(0)}`]));
-      top.appendChild(right2);
       wrap.appendChild(top);
 
-      // Progress bar
+      // Números grandes: GASTADO prominente
+      const nums=div('',[],`display:flex;align-items:baseline;gap:6px;margin-bottom:6px`);
+      nums.appendChild(el('span',{style:`font-size:26px;font-weight:800;color:${ok?row2.color:'#ef4444'}`},['€'+row2.real.toFixed(0)]));
+      nums.appendChild(el('span',{style:'font-size:13px;color:#64748b'},['gastado']));
+      wrap.appendChild(nums);
+
+      // Barra
       const bgBar=div('',[],'height:8px;border-radius:99px;background:#1e293b;overflow:hidden');
-      const fillPct = row2.label.includes('Ahorro') ? pctAho : row2.pct;
-      bgBar.appendChild(div('',[],'height:100%;border-radius:99px;transition:width 0.5s;background:'+(ok?row2.color:'#ef4444')+';width:'+fillPct+'%'));
+      bgBar.appendChild(div('',[],'height:100%;border-radius:99px;transition:width 0.5s;background:'+(ok?row2.color:'#ef4444')+';width:'+Math.min(100,row2.pct)+'%'));
       wrap.appendChild(bgBar);
 
-      // Status
-      const statusRow=div('',[],`display:flex;justify-content:space-between;margin-top:4px`);
-      if(row2.label.includes('Ahorro')) {
-        statusRow.appendChild(el('span',{style:'font-size:11px;color:#94a3b8'},['Disponible este mes']));
-        statusRow.appendChild(el('span',{style:`font-size:11px;font-weight:700;color:${ok?'#22c55e':'#ef4444'}`},[`€${row2.real.toFixed(0)} / €${row2.target.toFixed(0)}`]));
-      } else if(!ok) {
-        statusRow.appendChild(el('span',{style:'font-size:11px;color:#ef4444'},['⚠ Excedido']));
-        statusRow.appendChild(el('span',{style:'font-size:11px;font-weight:700;color:#ef4444'},[`+€${(row2.real-row2.target).toFixed(0)}`]));
+      // Estado
+      const st=div('',[],`display:flex;justify-content:space-between;margin-top:4px`);
+      if(!ok){
+        st.appendChild(el('span',{style:'font-size:11px;color:#ef4444'},['⚠ Excediste el límite en €'+(row2.real-row2.target).toFixed(0)]));
+      } else if(row2.label.includes('Ahorro')){
+        st.appendChild(el('span',{style:'font-size:11px;color:#22c55e'},['✓ Ahorro disponible este mes']));
+        st.appendChild(el('span',{style:'font-size:11px;font-weight:700;color:#22c55e'},['€'+row2.real.toFixed(0)+' / €'+row2.target.toFixed(0)]));
       } else {
-        statusRow.appendChild(el('span',{style:'font-size:11px;color:#64748b'},['Gastado / Límite']));
-        statusRow.appendChild(el('span',{style:'font-size:11px;color:#64748b'},[`€${row2.real.toFixed(0)} / €${row2.target.toFixed(0)}`]));
+        st.appendChild(el('span',{style:'font-size:11px;color:#64748b'},['Te quedan €'+resto.toFixed(0)+' disponibles']));
+        st.appendChild(el('span',{style:'font-size:11px;color:#64748b'},[Math.round(row2.pct)+'% usado']));
       }
-      wrap.appendChild(statusRow);
+      wrap.appendChild(st);
       reglaCard.appendChild(wrap);
     });
   } else {
-    reglaCard.appendChild(el('div',{style:'font-size:13px;color:#64748b;text-align:center;padding:8px 0'},['Ingresá tu sueldo mensual para ver la distribución ideal']));
+    reglaCard.appendChild(el('div',{style:'font-size:13px;color:#64748b;text-align:center;padding:8px 0'},['Cargá tus ingresos del mes arriba, o ingresá un monto base aquí']));
   }
   c.appendChild(reglaCard);
 
@@ -1279,11 +1278,11 @@ function renderFinanzas() {
     const catBtns=div('',[],`display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px`);
     CATS_ING.forEach(cat=>{
       const cb=btn(cat,'',()=>{
-        const m=prompt(`Monto de "${cat}" en ${MESES[m]}:`,'');
-        if(!m||isNaN(m)) return;
-        state.movs.unshift({id:uid(),desc:cat,monto:Number(m),tipo:'ingreso',cat,fecha:mesKey+'-01'});
+        const montoStr=prompt('Monto de "'+cat+'" este mes (€):','');
+        if(!montoStr||isNaN(montoStr)) return;
+        state.movs.unshift({id:uid(),desc:cat,monto:Number(montoStr),tipo:'ingreso',cat:cat,fecha:mesKey+'-01'});
         state.showIngForm=false; save(); showToast('✓ Ingreso guardado'); render();
-      },`padding:7px 12px;border-radius:8px;font-size:12px;border:1px solid #86efac;background:#f0fdf4;color:#15803d;cursor:pointer;font-family:inherit`);
+      },'padding:7px 12px;border-radius:8px;font-size:12px;border:1px solid #86efac;background:#f0fdf4;color:#15803d;cursor:pointer;font-family:inherit');
       catBtns.appendChild(cb);
     });
     f.appendChild(catBtns);
