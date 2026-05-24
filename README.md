@@ -1,4 +1,4 @@
-# 🌟 pochoclo
+# 🌟 Pochoclo
 
 **A personal daily life organizer — simple, warm, and built to last.**  
 Track your routines, finances, weekly meals, projects and more. Designed to be used in just a few minutes a day, from any device.
