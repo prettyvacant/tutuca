@@ -58,12 +58,12 @@ if('serviceWorker' in navigator) {
 }
 @media(prefers-color-scheme:dark){
   :root{
-    --bg:#14131c;
-    --surface:#1e1d28;
-    --border:#2e2c3e;
-    --text:#e4e0dc;
-    --muted:#8a8496;
-    --faint:#5a5468;
+    --bg:#18172a;
+    --surface:#242237;
+    --border:#3c3a58;
+    --text:#eae6e2;
+    --muted:#9b94a8;
+    --faint:#7a7290;
     --green-light:#0d2018;
     --red-light:#2a0e0a;
     --amber-light:#241a06;
@@ -2220,10 +2220,10 @@ function renderDiario() {
     const banderas={en:'🇬🇧',de:'🇩🇪'};
     const idiomaNombre={en:'Inglés',de:'Alemán'};
     const pCard=div('card');
-    pCard.appendChild(el('div',{style:'font-size:11px;font-weight:600;color:var(--faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px'},[banderas[idioma]+' Palabra del día — '+idiomaNombre[idioma]]));
+    pCard.appendChild(el('div',{style:'font-size:11px;font-weight:600;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px'},[banderas[idioma]+' Palabra del día — '+idiomaNombre[idioma]]));
     pCard.appendChild(el('div',{style:'font-size:28px;font-weight:800;color:var(--accent);margin-bottom:4px'},[pal.p]));
-    pCard.appendChild(el('div',{style:'font-size:14px;color:var(--muted);margin-bottom:8px'},[pal.t]));
-    pCard.appendChild(el('div',{style:'font-size:13px;color:var(--faint);font-style:italic'},['"'+pal.e+'"']));
+    pCard.appendChild(el('div',{style:'font-size:15px;color:var(--text);margin-bottom:8px'},[pal.t]));
+    pCard.appendChild(el('div',{style:'font-size:13px;color:var(--muted);font-style:italic'},['"'+pal.e+'"']));
     c.appendChild(pCard);
   }
 }
